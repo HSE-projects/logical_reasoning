@@ -28,6 +28,7 @@ from dataset_utils.collate_functions import collate_to_max_length
 from dataset_utils.sst_dataset import SSTDataset
 from dataset_utils.snli_dataset import SNLIDataset
 from dataset_utils.sick_dataset import SICKDataset
+from dataset_utils.anli_dataset import ANLIDataset
 from model import ExplainableModel
 from utils.radom_seed import set_random_seed
 
@@ -164,6 +165,11 @@ class ExplainNLP(pl.LightningModule):
             dataset = SSTDataset(directory=self.args.data_dir, prefix=prefix,
                                  bert_path=self.bert_dir,
                                  max_length=self.args.max_length)
+        elif self.args.task == 'anli':
+            dataset = ANLIDataset(directory=self.args.data_dir, prefix=prefix,
+                                 bert_path=self.bert_dir,
+                                 max_length=self.args.max_length)
+
         else:
             assert False, 'Unknown task found: ' + self.args.task
         dataloader = DataLoader(
