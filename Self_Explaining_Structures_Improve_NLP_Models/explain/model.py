@@ -12,7 +12,7 @@ import torch
 from torch import nn
 from transformers.modeling_roberta import RobertaModel, RobertaConfig
 
-from datasets.collate_functions import collate_to_max_length
+from dataset_utils.collate_functions import collate_to_max_length
 
 
 class ExplainableModel(nn.Module):

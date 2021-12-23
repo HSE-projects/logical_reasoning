@@ -24,9 +24,10 @@ from torch.nn.modules import CrossEntropyLoss
 from torch.utils.data.dataloader import DataLoader
 from transformers import AdamW, get_linear_schedule_with_warmup, RobertaTokenizer
 
-from datasets.collate_functions import collate_to_max_length
-from datasets.sst_dataset import SSTDataset
-from datasets.snli_dataset import SNLIDataset
+from dataset_utils.collate_functions import collate_to_max_length
+from dataset_utils.sst_dataset import SSTDataset
+from dataset_utils.snli_dataset import SNLIDataset
+from dataset_utils.sick_dataset import SICKDataset
 from model import ExplainableModel
 from utils.radom_seed import set_random_seed
 
@@ -155,10 +156,16 @@ class ExplainNLP(pl.LightningModule):
             dataset = SNLIDataset(directory=self.args.data_dir, prefix=prefix,
                                   bert_path=self.bert_dir,
                                   max_length=self.args.max_length)
-        else:
+        elif self.args.task == 'sick':
+            dataset = SICKDataset(directory=self.args.data_dir, prefix=prefix,
+                                  bert_path=self.bert_dir,
+                                  max_length=self.args.max_length)
+        elif self.args.task == 'sst5':
             dataset = SSTDataset(directory=self.args.data_dir, prefix=prefix,
                                  bert_path=self.bert_dir,
                                  max_length=self.args.max_length)
+        else:
+            assert False, 'Unknown task found: ' + self.args.task
         dataloader = DataLoader(
             dataset=dataset,
             batch_size=self.args.batch_size,
@@ -198,13 +205,13 @@ def get_parser():
     parser.add_argument("--warmup_steps", default=0, type=int, help="warmup steps")
     parser.add_argument("--use_memory", action="store_true", help="load dataset to memory to accelerate.")
     parser.add_argument("--max_length", default=512, type=int, help="max length of dataset")
-    parser.add_argument("--data_dir", required=True, type=str, help="train data path")
+    parser.add_argument("--data_dir", default='.', type=str, help="train data path")
     parser.add_argument("--save_path", required=True, type=str, help="path to save checkpoints")
     parser.add_argument("--save_topk", default=5, type=int, help="save topk checkpoint")
     parser.add_argument("--checkpoint_path", type=str, help="checkpoint path on test step")
     parser.add_argument("--span_topk", type=int, default=5, help="save topk spans on test step")
     parser.add_argument("--lamb", default=1.0, type=float, help="regularizer lambda")
-    parser.add_argument("--task", default='sst5', type=str, help="nlp tasks")
+    parser.add_argument("--task", required=True, type=str, help="nlp tasks (snli, sst5, sick)")
     parser.add_argument("--mode", default='train', type=str, help="either train or eval")
 
     return parser
@@ -267,3 +274,4 @@ if __name__ == '__main__':
 
     freeze_support()
     main()
+

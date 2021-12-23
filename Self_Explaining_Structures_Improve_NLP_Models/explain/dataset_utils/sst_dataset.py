@@ -15,7 +15,7 @@ import torch
 from transformers import RobertaTokenizer
 from torch.utils.data import Dataset, DataLoader
 
-from datasets.collate_functions import collate_to_max_length
+from dataset_utils.collate_functions import collate_to_max_length
 
 
 class SSTDataset(Dataset):

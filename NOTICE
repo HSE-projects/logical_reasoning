@@ -3,3 +3,7 @@ Self_Explaining_Structures_Improve_NLP_Models made by ShannonAI
 Changes in this repository:
 1. Moved folders datasets and utils to folder explain
 2. Added file __init__.py in folder explain/datasets
+3. Renamed datasets to dataset_utils
+4. Added support for SICK dataset
+5. --task doesn't have any default and is required now.
+6. --data-path is not required and has default '.'
