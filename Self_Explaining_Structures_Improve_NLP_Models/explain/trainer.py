@@ -229,6 +229,11 @@ def train(args):
         os.mkdir(args.save_path)
 
     model = ExplainNLP(args)
+    if args.checkpoint_path:
+        print('Loading checkpoint')
+        checkpoint = torch.load(args.checkpoint_path, map_location=torch.device('cpu'))
+        model.load_state_dict(checkpoint['state_dict'])
+        print('Loaded checkpoint')
 
     checkpoint_callback = ModelCheckpoint(
         filepath=os.path.join(args.save_path, '{epoch}-{valid_loss:.4f}-{valid_acc_end:.4f}'),
