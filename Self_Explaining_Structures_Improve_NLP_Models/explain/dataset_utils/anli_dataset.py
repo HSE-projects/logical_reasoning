@@ -26,11 +26,7 @@ class ANLIDataset(Dataset):
         self.max_length = max_length
 
         self.dataset = load_dataset('anli')
-        self.dataset = ConcatDataset([
-            self.dataset[prefix + '_r1'],
-            self.dataset[prefix + '_r2'],
-            self.dataset[prefix + '_r3'],
-        ])
+        self.dataset = self.dataset[prefix + '_r1'].select(range(1000))
         self.tokenizer = RobertaTokenizer.from_pretrained(bert_path)
 
     def __len__(self):
