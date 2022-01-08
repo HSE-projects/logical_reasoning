@@ -57,7 +57,7 @@ def prepare(args):
     exec_bash('pip uninstall torchtext -y')
     
     # Устанавливаем все необходимые пакеты
-    exec_bash('pip install -r ./logical_reasoning/Self_Explaining_Structures_Improve_NLP_Models/requirements.txt')
+    exec_bash('pip install -r ./logical_reasoning/eval_model/Self_Explaining_Structures_Improve_NLP_Models/requirements.txt')
     exec_bash('pip install datasets')
     exec_bash('pip install gdown')
     
@@ -103,7 +103,7 @@ def train_for_task(args, task):
     bert_path = os.getcwd() + f'/roberta-{args.roberta_model}'
     ckpt_path = os.getcwd() + f'/{task}_ckpt'
     
-    with cd('./logical_reasoning/Self_Explaining_Structures_Improve_NLP_Models/explain'):
+    with cd('./logical_reasoning/eval_model/Self_Explaining_Structures_Improve_NLP_Models/explain'):
         subprocess.run([
             'python', 'trainer.py',
             '--bert_path', bert_path,
@@ -129,7 +129,7 @@ def eval_task(args, task):
     
     exec_bash(f'mkdir {save_path}')
 
-    with cd('./logical_reasoning/Self_Explaining_Structures_Improve_NLP_Models/explain'):
+    with cd('./logical_reasoning/eval_model/Self_Explaining_Structures_Improve_NLP_Models/explain'):
         subprocess.run([
             'python', 'trainer.py',
             '--bert_path', bert_path,
