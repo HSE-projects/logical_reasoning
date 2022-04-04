@@ -87,7 +87,6 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
-        output_hidden_states=None,
         return_dict=None,
         antonym_ids=None,
         antonym_label=None,
@@ -123,7 +122,14 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
+        seq_len = input_ids.size()[1] // 3
+        a, b, c = labels[:, :seq_len], labels[:, seq_len:2*seq_len], labels[:, 2*seq_len:]
+        labels = torch.cat((a, b, c), dim=0)
+        a, b, c = input_ids[:, :seq_len], input_ids[:, seq_len:2*seq_len], input_ids[:, 2*seq_len:]
+        input_ids = torch.cat((a, b, c), dim=0)
+        a, b, c = attention_mask[:, :seq_len], attention_mask[:, seq_len:2*seq_len], attention_mask[:, 2*seq_len:]
+        attention_mask = torch.cat((a, b, c), dim=0)
         # Masked Language Model
         outputs = self.roberta(
             input_ids,
@@ -133,17 +139,26 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            output_hidden_states=True
         )
-
         sequence_output, pooled_output = outputs[:2]
-
+        hidden_states = outputs[2]
         batch_size = input_ids.size(0) // 3
         ori_seq, syn_ant_seq = sequence_output[:batch_size], sequence_output[batch_size:]
+
         mlm_labels, tec_labels = labels[:batch_size], labels[batch_size:]
-        mlm_scores = self.mlm_head(ori_seq)
-        tec_scores = self.tokn_classifier(syn_ant_seq)
+        if self.config.mlm_layer6:
+            print("KLEK")
+            mlm_scores = self.mlm_head(hidden_states[6][:batch_size])
+        else:
+            mlm_scores = self.mlm_head(ori_seq)
+        
+        if self.config.tec_layer6:
+            tec_scores = self.tokn_classifier(hidden_states[6][batch_size:])
+        else:
+            tec_scores = self.tokn_classifier(syn_ant_seq)
+
 
         ori_sen, syn_sen, ant_sen = pooled_output[:batch_size], pooled_output[batch_size:batch_size*2], pooled_output[batch_size*2:]
         ori_syn_rel = torch.sigmoid(torch.mean(ori_sen * syn_sen, dim=-1, keepdim=True))
@@ -191,3 +206,5 @@ from transformers import RobertaConfig
 
 class LecbertConfig(RobertaConfig):
     num_token_error = 3
+    mlm_layer6 = False
+    tec_layer6 = False

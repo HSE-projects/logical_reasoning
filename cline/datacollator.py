@@ -71,7 +71,12 @@ class DataCollatorForLEC:
         mlm_sent, mlm_label = self.mask_tokens(input_ids[:batch_size])
         input_ids[:batch_size] = mlm_sent
         labels[:batch_size] = mlm_label
-
+        a, b, c = labels[:batch_size], labels[batch_size:2 * batch_size], labels[2 * batch_size:]
+        labels = torch.cat((a, b, c), dim=1)
+        a, b, c = input_ids[:batch_size], input_ids[batch_size:2 * batch_size], input_ids[2 * batch_size:]
+        input_ids = torch.cat((a, b, c), dim=1)
+        a, b, c = attention_mask[:batch_size], attention_mask[batch_size:2 * batch_size], attention_mask[2 * batch_size:]
+        attention_mask = torch.cat((a, b, c), dim=1)
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
