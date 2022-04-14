@@ -17,7 +17,7 @@ class DataCollatorForLEC:
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
     mlm_probability: float = 0.15
-    block_size: int = 512
+    block_size: int = 128
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> Dict[str, torch.Tensor]:
         batch_size = len(examples)

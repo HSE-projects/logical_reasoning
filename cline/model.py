@@ -69,7 +69,12 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
 
         self.roberta = RobertaModel(config)
         self.mlm_head = LecbertLMHead(config)
+        if self.config.mlm_layer6:
+            self.mlm_head6 = LecbertLMHead(config)
         self.tokn_classifier = LecbertTECHead(config)
+        if self.config.tec_layer6:
+            self.tokn_classifier6 = LecbertTECHead(config)
+
         self.log_vars = nn.Parameter(torch.zeros(3))
 
         self.init_weights()
@@ -148,16 +153,13 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
         ori_seq, syn_ant_seq = sequence_output[:batch_size], sequence_output[batch_size:]
 
         mlm_labels, tec_labels = labels[:batch_size], labels[batch_size:]
+        mlm_scores = self.mlm_head(ori_seq)
         if self.config.mlm_layer6:
-            print("KLEK")
-            mlm_scores = self.mlm_head(hidden_states[6][:batch_size])
-        else:
-            mlm_scores = self.mlm_head(ori_seq)
+            mlm_scores6 = self.mlm_head6(hidden_states[6][:batch_size])
         
+        tec_scores = self.tokn_classifier(syn_ant_seq)
         if self.config.tec_layer6:
-            tec_scores = self.tokn_classifier(hidden_states[6][batch_size:])
-        else:
-            tec_scores = self.tokn_classifier(syn_ant_seq)
+            tec_scores6 = self.tokn_classifier6(hidden_states[6][batch_size:])
 
 
         ori_sen, syn_sen, ant_sen = pooled_output[:batch_size], pooled_output[batch_size:batch_size*2], pooled_output[batch_size*2:]
@@ -170,15 +172,23 @@ class LecbertForPreTraining(RobertaPreTrainedModel):
         if labels is not None:
             loss_tok = CrossEntropyLoss()
             mlm_loss = loss_tok(mlm_scores.view(-1, self.config.vocab_size), mlm_labels.view(-1))
+            if self.config.mlm_layer6:
+                mlm_loss += loss_tok(mlm_scores6.view(-1, self.config.vocab_size), mlm_labels.view(-1))
             tec_loss = loss_tok(tec_scores.view(-1, self.config.num_token_error), tec_labels.view(-1))
+            if self.config.tec_layer6:
+                mlm_loss += loss_tok(tec_scores6.view(-1, self.config.num_token_error), tec_labels.view(-1))
 
             loss_sen = BCELoss()
             sec_loss = loss_sen(sec_scores.view(-1), sec_labels.view(-1))
-
-            # total_loss = mlm_loss + tec_loss + sec_loss
-            total_loss = torch.exp(-self.log_vars[0]) * mlm_loss + torch.clamp(self.log_vars[0], min=0) + \
-                         torch.exp(-self.log_vars[1]) * tec_loss + torch.clamp(self.log_vars[1], min=0) + \
-                         torch.exp(-self.log_vars[2]) * sec_loss + torch.clamp(self.log_vars[2], min=0)
+            
+            if self.config.mlm_only:
+                total_loss = mlm_loss
+            elif not self.config.use_log_vars:
+                total_loss = mlm_loss + tec_loss + sec_loss
+            else:
+                total_loss = torch.exp(-self.log_vars[0]) * mlm_loss + torch.clamp(self.log_vars[0], min=0) + \
+                             torch.exp(-self.log_vars[1]) * tec_loss + torch.clamp(self.log_vars[1], min=0) + \
+                             torch.exp(-self.log_vars[2]) * sec_loss + torch.clamp(self.log_vars[2], min=0)
 
             #print(mlm_loss.item(), tec_loss.item(), sec_loss.item())
 
@@ -208,3 +218,5 @@ class LecbertConfig(RobertaConfig):
     num_token_error = 3
     mlm_layer6 = False
     tec_layer6 = False
+    use_log_vars = False
+    mlm_only = False

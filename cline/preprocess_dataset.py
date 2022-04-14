@@ -73,6 +73,9 @@ class PreprocessArguments:
     output_file: Optional[str] = field(
         default='datasets/cline_snli', metadata={"help": "Where do you want preprocessed dataset"}
     )
+    dataset_name: Optional[str] = field(
+        default='snli', metadata={"help": "What dataset do you use"}
+    )
         
         
 def search_replacement(doc, candidate_index, replace_type, max_num, pos_to_words=None):
@@ -206,33 +209,33 @@ def replace_word(doc):
 
 
 def word_replace(examples):
-        inputs = examples['text']
+    inputs = examples['text']
 
-        original_sent = []
-        synonym_sent = []
-        synonym_intv = []
-        antonym_sent = []
-        antonym_intv = []
-        docs = spacy_nlp.pipe(inputs, n_process=1, batch_size=100, disable=['parser', 'ner'])
-        for doc in docs:
-            ori_sent = " ".join([t.text for t in doc])
-            syn_sent = " ".join(doc._._synonym_sent)
-            ant_sent = " ".join(doc._._antonym_sent)
+    original_sent = []
+    synonym_sent = []
+    synonym_intv = []
+    antonym_sent = []
+    antonym_intv = []
+    docs = spacy_nlp.pipe(inputs, n_process=1, batch_size=100, disable=['parser', 'ner'])
+    for doc in docs:
+        ori_sent = " ".join([t.text for t in doc])
+        syn_sent = " ".join(doc._._synonym_sent)
+        ant_sent = " ".join(doc._._antonym_sent)
 
-            syn_intv = doc._._synonym_intv
-            ant_intv = doc._._antonym_intv
+        syn_intv = doc._._synonym_intv
+        ant_intv = doc._._antonym_intv
 
-            original_sent.append(ori_sent)
-            synonym_sent.append(syn_sent)
-            synonym_intv.append(syn_intv)
-            antonym_sent.append(ant_sent)
-            antonym_intv.append(ant_intv)
+        original_sent.append(ori_sent)
+        synonym_sent.append(syn_sent)
+        synonym_intv.append(syn_intv)
+        antonym_sent.append(ant_sent)
+        antonym_intv.append(ant_intv)
 
-        return {'original_sent': original_sent,
-                'synonym_sent': synonym_sent,
-                'synonym_intv': synonym_intv,
-                'antonym_sent': antonym_sent,
-                'antonym_intv': antonym_intv}
+    return {'original_sent': original_sent,
+            'synonym_sent': synonym_sent,
+            'synonym_intv': synonym_intv,
+            'antonym_sent': antonym_sent,
+            'antonym_intv': antonym_intv}
     
 
 def get_replace_label(word_list, repl_intv, orig_sent):
@@ -263,45 +266,47 @@ def get_replace_label(word_list, repl_intv, orig_sent):
 
 
 def convert_tokens_to_ids(examples):
-        input_ids = []
-        ori_syn_label = []
-        ori_ant_label = []
-        synonym_ids = []
-        synonym_label = []
-        antonym_ids = []
-        antonym_label = []
+    input_ids = []
+    ori_syn_label = []
+    ori_ant_label = []
+    synonym_ids = []
+    synonym_label = []
+    antonym_ids = []
+    antonym_label = []
 
-        exp_nums = len(examples['original_sent'])
-        for i in range(exp_nums):
-            ori_sent = tokenizer.tokenize(examples['original_sent'][i])
-            syn_sent = tokenizer.tokenize(examples['synonym_sent'][i])
-            ant_sent = tokenizer.tokenize(examples['antonym_sent'][i])
+    exp_nums = len(examples['original_sent'])
+    for i in range(exp_nums):
+        ori_sent = tokenizer.tokenize(examples['original_sent'][i])
+        syn_sent = tokenizer.tokenize(examples['synonym_sent'][i])
+        ant_sent = tokenizer.tokenize(examples['antonym_sent'][i])
 
-            syn_labl = get_replace_label(syn_sent, examples['synonym_intv'][i], examples['synonym_sent'][i])
-            ant_labl = get_replace_label(ant_sent, examples['antonym_intv'][i], examples['antonym_sent'][i])
+        syn_labl = get_replace_label(syn_sent, examples['synonym_intv'][i], examples['synonym_sent'][i])
+        ant_labl = get_replace_label(ant_sent, examples['antonym_intv'][i], examples['antonym_sent'][i])
 
-            ori_ids = tokenizer.convert_tokens_to_ids(ori_sent)
-            syn_ids = tokenizer.convert_tokens_to_ids(syn_sent)
-            ant_ids = tokenizer.convert_tokens_to_ids(ant_sent)
+        ori_ids = tokenizer.convert_tokens_to_ids(ori_sent)
+        syn_ids = tokenizer.convert_tokens_to_ids(syn_sent)
+        ant_ids = tokenizer.convert_tokens_to_ids(ant_sent)
 
-            input_ids.append(ori_ids)
-            synonym_ids.append(syn_ids)
-            synonym_label.append(syn_labl)
-            antonym_ids.append(ant_ids)
-            antonym_label.append(ant_labl)
+        input_ids.append(ori_ids)
+        synonym_ids.append(syn_ids)
+        synonym_label.append(syn_labl)
+        antonym_ids.append(ant_ids)
+        antonym_label.append(ant_labl)
 
-        return {'input_ids': input_ids,
-                'synonym_ids': synonym_ids,
-                'synonym_label': synonym_label,
-                'antonym_ids': antonym_ids,
-                'antonym_label': antonym_label}
+    return {'input_ids': input_ids,
+            'synonym_ids': synonym_ids,
+            'synonym_label': synonym_label,
+            'antonym_ids': antonym_ids,
+            'antonym_label': antonym_label}
 
 
 def preprocess_snli(examples):
     examples['text'] = examples["hypothesis"]
     return examples
 
-
+def preprocess_news(examples):
+    examples['text'] = examples["text"]
+    return examples
 
 if __name__ == "__main__":
     parser = HfArgumentParser((PreprocessArguments,))
@@ -310,18 +315,23 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
 
     # get and prepare dataset
-    snli = load_dataset("snli", cache_dir=model_args.cache_dir)
-    cline_snli = snli.map(preprocess_snli, batched=True, remove_columns=["premise", "hypothesis", 'label'])
+    if model_args.dataset_name == 'snli':
+        snli = load_dataset("snli", cache_dir=model_args.cache_dir)
+        cline_dataset = snli.map(preprocess_snli, batched=True, remove_columns=["premise", "hypothesis", 'label'])
+    elif model_args.dataset_name == 'ag_news':
+        news = load_dataset('ag_news', cache_dir=model_args.cache_dir)
+        cline_dataset = news.map(preprocess_news, batched=True, remove_columns=['label'])
+        
     spacy_nlp.add_pipe('replace_word', last=True)
-    preprocess_snli = cline_snli.map(word_replace,
+    preprocess_cline = cline_dataset.map(word_replace,
                         batched=True,
                         remove_columns='text')
-    preprocess_snli.set_format(type=None, columns=['original_sent', 'synonym_sent', 'synonym_intv', 'antonym_sent', 'antonym_intv'])
+    preprocess_cline.set_format(type=None, columns=['original_sent', 'synonym_sent', 'synonym_intv', 'antonym_sent', 'antonym_intv'])
     
-    preprocess_snli = preprocess_snli.map(convert_tokens_to_ids,
+    preprocess_cline = preprocess_cline.map(convert_tokens_to_ids,
                             batched=True,
                             remove_columns=['original_sent', 'synonym_sent', 'synonym_intv', 'antonym_sent', 'antonym_intv'])
 
-    preprocess_snli.set_format(type=None, columns=['input_ids', 'synonym_ids', 'synonym_label', 'antonym_ids', 'antonym_label'])
+    preprocess_cline.set_format(type=None, columns=['input_ids', 'synonym_ids', 'synonym_label', 'antonym_ids', 'antonym_label'])
     
-    preprocess_snli.save_to_disk(model_args.output_file)
+    preprocess_cline.save_to_disk(model_args.output_file)
