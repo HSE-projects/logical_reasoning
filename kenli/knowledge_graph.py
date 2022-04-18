@@ -27,7 +27,7 @@ class CauseNet(KnowledgeGraph):
             exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-full.jsonl.bz2')
             exec_bash('mv causenet-full.jsonl.bz2 causenet.jsonl.bz2')
         else:
-            #exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-precision.jsonl.bz2')
+            exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-precision.jsonl.bz2')
             exec_bash('mv causenet-precision.jsonl.bz2 causenet.jsonl.bz2')
         print('Resulting size of causenet.jsonl.bz2:')
         exec_bash('du -h causenet.jsonl.bz2')
@@ -35,9 +35,9 @@ class CauseNet(KnowledgeGraph):
         print('Removing old file...')
         #exec_bash('rm causenet.jsonl')
         print('Unpacking bz2 file...')
-        #exec_bash('bzip2 -d causenet.jsonl.bz2')
+        exec_bash('bzip2 -d causenet.jsonl.bz2')
         print('Resulting size of causenet.jsonl:')
-        #exec_bash('du -h causenet.jsonl')
+        exec_bash('du -h causenet.jsonl')
 
         print('Extracting connections...')
         connections = []
@@ -55,11 +55,17 @@ class CauseNet(KnowledgeGraph):
     def get_tokens(self, premise: str, hypothesis: str) -> List[str]:
         premise_objects = self._filter_objects(self._get_objects(premise))
         hypothesis_objects = self._filter_objects(self._get_objects(hypothesis))
-        useful_objects = self._get_useful_objects(premise_objects, hypothesis_objects)
-        print(f'Added {len(useful_objects)} useful objects')
-        while len(useful_objects) < self.min_object_count:
-            useful_objects.update(self._get_random_path(premise_objects))
-        return useful_objects
+        useful_objects, edges = self._get_useful_objects(premise_objects, hypothesis_objects)
+        #print(f'Added {len(useful_objects)} useful objects')
+        if len(premise_objects) == 0:
+          useful_objects.update({"cat"})
+        else:
+          rand_steps = - len(useful_objects) + self.min_object_count
+          for _ in range(rand_steps):
+              rand_objects, rand_edges = self._get_random_path(premise_objects)
+              useful_objects.update(rand_objects)
+              edges.update(rand_edges)
+        return useful_objects, edges
 
     def _get_objects(self, sentence: str):
         sentence = sentence.lower()
@@ -84,13 +90,16 @@ class CauseNet(KnowledgeGraph):
     
     def _get_useful_objects(self, premise_objects, hypothesis_objects):
         result = set()
+        edges = set()
 
         cur_row = []
         def dfs(obj, cur_d):
             cur_row.append(obj)
             if obj in hypothesis_objects:
-                print('Found path!', cur_row)
+                #print('Found path!', cur_row)
                 result.update(cur_row)
+                for edge_ind in range(len(cur_row) - 1):
+                  edges.add((cur_row[edge_ind], cur_row[edge_ind + 1]))
             for nxt_obj in self.g.get(obj, []):
                 if cur_d + 1 <= self.max_depth:
                     dfs(nxt_obj, cur_d + 1)
@@ -100,12 +109,15 @@ class CauseNet(KnowledgeGraph):
             if premise_obj not in hypothesis_objects:
                 dfs(premise_obj, 0)
 
-        return result
+        return result, edges
     
     def _get_random_path(self, premise_objects):
+        edges = set()
         result = [random.choice(list(premise_objects))]
         while len(result) < self.max_depth:
             result.append(random.choice(self.g[result[-1]]))
-        print('Added random path:', result)
-        return result
+        for edge_ind in range(len(result) - 1):
+            edges.add((result[edge_ind], result[edge_ind + 1]))
+        #print('Added random path:', result)
+        return result, edges
 
