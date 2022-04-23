@@ -109,7 +109,7 @@ if __name__ == "__main__":
         eval_dataset = dataset["test"]
     
     training_args = TrainingArguments(
-        output_dir=os.path.join(model_args.output_dir, 'cline'),
+        output_dir=os.path.join(model_args.output_dir, 'shuffle'),
         per_device_train_batch_size=model_args.batch_size // n_gpus,
         per_device_eval_batch_size=model_args.eval_batch_size // n_gpus,
         evaluation_strategy="epoch",
