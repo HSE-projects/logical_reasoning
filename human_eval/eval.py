@@ -29,6 +29,11 @@ def preprocess_shuffled(examples):
     x = tokenizer(examples["shuffled_hypothesis"], examples["shuffled_premise"])
     return x
 
+
+def preprocess_snli(examples):
+    x = tokenizer(examples["hypothesis"], examples["premise"])
+    return x
+
 import numpy as np
 from datasets import load_metric
 import numpy as np
@@ -44,7 +49,16 @@ def fix_negative(examples):
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
-    return {'accuracy': metric.compute(predictions=predictions, references=labels), 'follow': (predictions == 0).sum()}
+    if shuffled:
+        with open('predictions.npy', 'wb') as f:
+            norm_predictions = np.load(f)
+        interesting_predictions = predictions[norm_predictions == labels]
+        interesting_labels = labels[norm_predictions == labels]
+        return {'accuracy': metric.compute(predictions=interesting_predictions, references=interesting_labels), 'neutral': (predictions == 1).sum()}
+    else:
+        with open('predictions.npy', 'wb') as f:
+            np.save(f, predictions)
+        return {'accuracy': metric.compute(predictions=predictions, references=labels), 'neutral': (predictions == 1).sum()}
 
 @dataclass
 class PreprocessArguments:
@@ -81,13 +95,15 @@ if __name__ == "__main__":
 
         if task_name == 'snli':
             snli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'shuffle_snli'))
-            tokenized_snli = snli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", "premise", "hypothesis"])
-            test_datasets = [("test", tokenized_snli["test"])]
+            normal_snli = snli.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", "premise", "hypothesis"])
+            shuffled_snli = snli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", "premise", "hypothesis"])
+            test_datasets = [("test", normal_snli["test"], shuffled_snli["test"])]
         if task_name == 'mnli':
             mnli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'shuffle_mnli'))
             # not typo in preprocess_snli, because they both have hypothesis and premise
-            tokenized_mnli = mnli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", 'promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
-            test_datasets = [("validation_matched", tokenized_mnli["validation_matched"]), ("validation_mismatched", tokenized_mnli["validation_mismatched"])]
+            normal_mnli = mnli.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", 'promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
+            shuffled_mnli = mnli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", 'promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
+            test_datasets = [("validation_matched", normal_mnli["validation_matched"], shuffled_mnli["validation_matched"]), ("validation_mismatched", normal_mnli["validation_mismatched"], shuffled_mnli["validation_mismatched"])]
 
         model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, '{}_{}_final_model'.format(task_name, test_datasets[0][0])), num_labels=3, cache_dir=model_args.cache_dir)
         
@@ -109,8 +125,8 @@ if __name__ == "__main__":
         )
 
         with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
-            for test_name, test_dataset in test_datasets:
-                res = trainer.predict(test_dataset.select(range(100)))
-                print(res)
+            for test_name, test_dataset, test_shuffled in test_datasets:
+                res = trainer.predict(test_dataset)
+                res = trainer.predict(test_shuffled)
                 if trainer.is_world_process_zero():
-                    print(test_name, res.metrics['test_accuracy'], file=f)
+                    print(task_name, test_name, res.metrics['test_accuracy'], res.metrics['test_neutral'], file=f)
