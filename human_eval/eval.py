@@ -44,7 +44,7 @@ def fix_negative(examples):
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+    return {'accuracy': metric.compute(predictions=predictions, references=labels), 'follow': (predictions == 0).sum()}
 
 @dataclass
 class PreprocessArguments:
@@ -71,30 +71,28 @@ if __name__ == "__main__":
     print("Found {} GPUs".format(n_gpus))
     parser = HfArgumentParser((PreprocessArguments,))
     model_args, = parser.parse_args_into_dataclasses()
-    name = model_args.model_name
     
     metric = load_metric("accuracy")
     set_seed(42)
+    tokenizer = AutoTokenizer.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
 
     for task_name in ['snli', 'mnli']:
-        tokenizer = AutoTokenizer.from_pretrained(name, cache_dir=model_args.cache_dir)
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-        if model_args.task_name == 'snli':
-            snli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'shuffled_snli'))
-            tokenized_snli = snli.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", "premise", "hypothesis"])
+        if task_name == 'snli':
+            snli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'shuffle_snli'))
+            tokenized_snli = snli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", "premise", "hypothesis"])
             test_datasets = [("test", tokenized_snli["test"])]
-        if model_args.task_name == 'mnli':
-            mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
+        if task_name == 'mnli':
+            mnli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'shuffle_mnli'))
             # not typo in preprocess_snli, because they both have hypothesis and premise
-            tokenized_mnli = mnli.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", 'promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
+            tokenized_mnli = mnli.map(preprocess_shuffled, batched=True).map(fix_negative, batched=True, remove_columns=["shuffled_premise", "shuffled_hypothesis", 'promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
             test_datasets = [("validation_matched", tokenized_mnli["validation_matched"]), ("validation_mismatched", tokenized_mnli["validation_mismatched"])]
 
         model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, '{}_{}_final_model'.format(task_name, test_datasets[0][0])), num_labels=3, cache_dir=model_args.cache_dir)
         
         training_args = TrainingArguments(
-            output_dir=os.path.join(model_args.output_dir, 'human_eval_logs'.format(model_args.task_name)),
-            per_device_train_batch_size=model_args.batch_size // n_gpus,
+            output_dir=os.path.join(model_args.output_dir, 'human_eval_logs'),
             per_device_eval_batch_size=model_args.eval_batch_size // n_gpus,
             evaluation_strategy="epoch",
             logging_strategy="epoch",
@@ -110,8 +108,9 @@ if __name__ == "__main__":
             compute_metrics=compute_metrics
         )
 
-        with open(os.path.join(model_args.output_dir, 'human_results.txt'.format(model_args.task_name)), 'a') as f:
+        with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
             for test_name, test_dataset in test_datasets:
-                res = trainer.predict(test_dataset)
+                res = trainer.predict(test_dataset.select(range(100)))
+                print(res)
                 if trainer.is_world_process_zero():
                     print(test_name, res.metrics['test_accuracy'], file=f)

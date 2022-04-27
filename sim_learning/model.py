@@ -65,8 +65,18 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
         self.num_labels = config.num_labels
             
         self.roberta = RobertaModel(config)
+        if self.config.mlm_layer2:
+            self.mlm_head2 = RobertaLMHead(config)
+        if self.config.mlm_layer4:
+            self.mlm_head4 = RobertaLMHead(config)
         if self.config.mlm_layer6:
             self.mlm_head6 = RobertaLMHead(config)
+        if self.config.mlm_layer8:
+            self.mlm_head8 = RobertaLMHead(config)
+        if self.config.mlm_layer10:
+            self.mlm_head10 = RobertaLMHead(config)
+        if self.config.mlm_layer12:
+            self.mlm_head12 = RobertaLMHead(config)
         self.classifier = RobertaClassificationHead(config)
         
         self.init_weights()
@@ -88,32 +98,6 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
         synonym_label=None,
         **kwargs,
     ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape ``(batch_size, sequence_length)``, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-        replace_label (``torch.LongTensor`` of shape ``(batch_size,sequence_length)``, `optional`):
-            Labels for computing the token replace type prediction (classification) loss.
-            Indices should be in ``[0, 1, 2, 3, 4, 5, 6]``:
-            - 0 indicates the token is the original token,
-            - 1 indicates the token is replaced with the lemminflect token,
-            - 2 indicates the token is replaced with the synonym,
-            - 3 indicates the token is replaced with the hypernyms,
-            - 4 indicates the token is replaced with the adjacency,
-            - 5 indicates the token is replaced with the antonym,
-            - 6 indicates the token is replaced with the random word.
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
-        Returns:
-        """
-        if "masked_lm_labels" in kwargs:
-            warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         seq_len = input_ids.size()[1] // 2
@@ -139,8 +123,18 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
         class_scores = self.classifier(sequence_output[:batch_size])
         hidden_states = outputs[2]
 
+        if self.config.mlm_layer2:
+            mlm_scores2 = self.mlm_head2(hidden_states[2][batch_size:])
+        if self.config.mlm_layer4:
+            mlm_scores4 = self.mlm_head4(hidden_states[4][batch_size:])
         if self.config.mlm_layer6:
             mlm_scores6 = self.mlm_head6(hidden_states[6][batch_size:])
+        if self.config.mlm_layer8:
+            mlm_scores8 = self.mlm_head8(hidden_states[8][batch_size:])
+        if self.config.mlm_layer10:
+            mlm_scores10 = self.mlm_head10(hidden_states[10][batch_size:])
+        if self.config.mlm_layer12:
+            mlm_scores12 = self.mlm_head12(hidden_states[12][batch_size:])
 
         total_loss = None
         if labels is not None:
@@ -148,11 +142,25 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
             loss_class = CrossEntropyLoss()
             class_loss = loss_class(class_scores, class_labels)
 
+            total_loss = class_loss
+            if self.config.mlm_layer2:
+                mlm_loss = loss_tok(mlm_scores2.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
+                total_loss += mlm_loss
+            if self.config.mlm_layer4:
+                mlm_loss = loss_tok(mlm_scores4.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
+                total_loss += mlm_loss
             if self.config.mlm_layer6:
                 mlm_loss = loss_tok(mlm_scores6.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
-                total_loss = mlm_loss + class_loss
-            else:
-                total_loss = class_loss
+                total_loss += mlm_loss
+            if self.config.mlm_layer8:
+                mlm_loss = loss_tok(mlm_scores8.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
+                total_loss += mlm_loss
+            if self.config.mlm_layer10:
+                mlm_loss = loss_tok(mlm_scores10.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
+                total_loss += mlm_loss
+            if self.config.mlm_layer12:
+                mlm_loss = loss_tok(mlm_scores12.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
+                total_loss += mlm_loss
 
             #print(mlm_loss.item(), tec_loss.item(), sec_loss.item())
         if not return_dict:
@@ -174,4 +182,9 @@ class SimbertOutput(ModelOutput):
 from transformers import RobertaConfig
 
 class SimConfig(RobertaConfig):
-    mlm_layer6 = True
+    mlm_layer6 = False
+    mlm_layer4 = False
+    mlm_layer2 = False
+    mlm_layer8 = False
+    mlm_layer10 = False
+    mlm_layer12 = False

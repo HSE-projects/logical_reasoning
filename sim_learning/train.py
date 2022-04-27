@@ -42,7 +42,7 @@ def fix_negative(examples):
     return examples
 
 def compute_metrics(eval_pred):
-    predictions = np.argmax(eval_pred[0][0], axis=-1)
+    predictions = np.argmax(eval_pred[0], axis=-1)
     return metric.compute(predictions=predictions, references=eval_pred[1][:, 0])
 
 class TrainMetricsCallback(TrainerCallback):
@@ -67,8 +67,23 @@ class PreprocessArguments:
     output_dir: Optional[str] = field(
         default='/home/vapavlov_4/models/robeta_base_cline_snli', metadata={"help": "Where do you want to store model"}
     )
+    mlm_layer2: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 2"}
+    )
+    mlm_layer4: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 4"}
+    )
     mlm_layer6: Optional[bool] = field(
-        default=True, metadata={"help": "Use mlm loss on layer 6 instead of last layer"}
+        default=False, metadata={"help": "Use mlm loss on layer 6"}
+    )
+    mlm_layer8: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 8"}
+    )
+    mlm_layer10: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 10"}
+    )
+    mlm_layer12: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 12"}
     )
     task_name: Optional[str] = field(
         default='snli', metadata={"help": "Task to finetune - snli or mnli"}
@@ -108,7 +123,12 @@ if __name__ == "__main__":
     data_collator = DataCollatorForSim(tokenizer=tokenizer)
     
     config = SimConfig.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
+    config.mlm_layer2 = model_args.mlm_layer2
+    config.mlm_layer4 = model_args.mlm_layer4
     config.mlm_layer6 = model_args.mlm_layer6
+    config.mlm_layer8 = model_args.mlm_layer8
+    config.mlm_layer10 = model_args.mlm_layer10
+    config.mlm_layer12 = model_args.mlm_layer12
     config.num_labels = 3
 
     model = SimbertForPreTraining.from_pretrained(model_args.model_name, config=config, cache_dir=model_args.cache_dir)
