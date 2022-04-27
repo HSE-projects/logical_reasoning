@@ -51,9 +51,6 @@ class PreprocessArguments:
     model_name: Optional[str] = field(
         default='roberta-base', metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    model_path: Optional[str] = field(
-        default='roberta-base', metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
-    )
     datasets_dir: Optional[str] = field(
         default='datasets', metadata={"help": "Where do you want to store the datasets"}
     )
