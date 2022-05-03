@@ -74,12 +74,51 @@ class PreprocessArguments:
     output_dir: Optional[str] = field(
         default='exps/exp0', metadata={"help": "Where do you want to store results"}
     )
+    base_model: Optional[str] = field(
+        default='roberta-base', metadata={"help": ""}
+    )
     eval_batch_size: Optional[int] = field(
         default=128, metadata={"help": "Per device batch size"}
     )
 
 import torch
+import numpy as np
+from torch import nn
+
+def calculate_intrasim(model, test_dataset, tokenizer):
+    intra_sims = []
+    random_sims = [[] for i in range(13)]
+    random_prob = 0.001
+    cos = nn.CosineSimilarity(dim=2, eps=1e-6)
+
+    for i in tqdm(range(len(test_dataset))):
+        inputs = tokenizer(test_dataset[i]['hypothesis'], test_dataset[i]['premise'], return_tensors="pt")
+        hidden_states = model(**inputs.to(device))['hidden_states']
+        example_sims = []
+        for layer in range(len(hidden_states)):
+            probs = torch.ones(hidden_states[layer].size()[1]) * random_prob
+            taken = torch.bernoulli(probs)
+            for i in range(len(taken)):
+                if taken[i]:
+                    random_sims[layer].append(hidden_states[layer][0, i])
+            example_sims.append(cos(hidden_states[layer], hidden_states[layer].mean(dim=1, keepdim=True)).mean().item())
+        intra_sims.append(example_sims)
+    intra_sims = np.array(intra_sims)
+    
+    # calculate anisotropy
+    simple_cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+    layers_anisotropy = []
+    for layer in range(13):
+        ans = 0
+        for i in tqdm(range(len(random_sims[layer]))):
+            for j in range(i, len(random_sims[layer])):
+                ans += simple_cos(random_sims[layer][i], random_sims[layer][j]).item()
+        ans /= (len(random_sims[layer]) * (len(random_sims[layer]) - 1)) / 2
+        layers_anisotropy.append(ans)
         
+    layer_sims = intra_sims.mean(axis=0)
+    return layer_sims, np.array(layers_anisotropy)
+
 if __name__ == "__main__":
     n_gpus = max(1, torch.cuda.device_count())
     print("Found {} GPUs".format(n_gpus))
@@ -90,6 +129,7 @@ if __name__ == "__main__":
     set_seed(42)
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
 
+    # shuffled
     for task_name in ['snli', 'mnli']:
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
@@ -130,3 +170,84 @@ if __name__ == "__main__":
                 res = trainer.predict(test_shuffled)
                 if trainer.is_world_process_zero():
                     print(task_name, test_name, res.metrics['test_accuracy'], res.metrics['test_neutral'], file=f)
+                    
+                    
+    # adv / con
+    for task_name in ['snli', 'mnli']:
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+        if task_name == 'snli':
+            adv_snli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'adv_snli'))
+            adv_snli = snli.map(adv_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            con_snli = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'contrastive_snli'))
+            con_snli = snli.map(con_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            test_datasets = [("adv_snli", adv_snli["test"]), ("con_snli", con_snlis["test"])]
+            model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, 'snli_test_final_model'), num_labels=3, cache_dir=model_args.cache_dir)
+        if task_name == 'mnli':
+            adv_mnli_matched = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_matched'))
+            adv_mnli_mismatched = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_mismatched'))
+            adv_mnli_matched = adv_mnli_matched.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            adv_mnli_mismatched = adv_mnli_mismatched.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            
+            con_mnli_matched = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'contrastive_mnli_matched'))
+            con_mnli_mismatched = datasets.load_from_disk(os.path.join(model_args.datasets_dir, 'contrastive_mnli_mismatched'))
+            con_mnli_matched = con_mnli_matched.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            con_mnli_mismatched = con_mnli_mismatched.map(preprocess_snli, batched=True).map(fix_negative, batched=True, remove_columns=["premise", "hypothesis"])
+            
+            test_datasets = [("adv_mnli_matched", adv_mnli_matched["test"]), ("adv_mnli_mismatched", adv_mnli_mismatched["test"]), ("con_mnli_matched", con_mnli_matched["test"]), ("con_mnli_mismatched", con_mnli_mismatched["test"])]
+            model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, 'mnli_validation_matched_final_model'), num_labels=3, cache_dir=model_args.cache_dir)
+
+        training_args = TrainingArguments(
+            output_dir=os.path.join(model_args.output_dir, 'human_eval_logs'),
+            per_device_eval_batch_size=model_args.eval_batch_size // n_gpus,
+            evaluation_strategy="epoch",
+            logging_strategy="epoch",
+            save_strategy='epoch',
+            seed=42,
+        )
+
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics
+        )
+
+        with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
+            for test_name, test_dataset in test_datasets:
+                res = trainer.predict(test_dataset)
+                if trainer.is_world_process_zero():
+                    print(test_name, res.metrics['test_accuracy'], file=f)
+    
+    base_model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, model_args.base_model), num_labels=3, cache_dir=model_args.cache_dir, output_hidden_states=True)
+    base_model.to(device)
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, 'snli_test_final_model'), num_labels=3, cache_dir=model_args.cache_dir, output_hidden_states=True)
+    model.to(device)
+    snli = load_dataset("snli", cache_dir=model_args.cache_dir)
+    test_datasets = [('snli_test', snli['test'])]
+    for test_name, test_dataset in test_datasets:
+        intra_sim, anisotropy = calculate_intrasim(model, test_dataset, tokenizer)
+        base_intra_sim, base_anisotropy = calculate_intrasim(base_model, test_dataset, tokenizer)
+
+        with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
+            print(test_name, "intra_sim:", intra_sim, file=f)
+            print(test_name, "anisotropy:", anisotropy, file=f)
+            print(test_name, "base_intra_sim:", intra_sim, file=f)
+            print(test_name, "base_anisotropy:", anisotropy, file=f)
+            
+    model = AutoModelForSequenceClassification.from_pretrained(os.path.join(model_args.output_dir, 'mnli_validation_matched_final_model'), num_labels=3, cache_dir=model_args.cache_dir, output_hidden_states=True)
+    model.to(device)
+    mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
+    test_datasets = [('mnli_matched', mnli['validation_matched']), ('mnli_mismatched', mnli['validation_mismatched'])]
+    for test_name, test_dataset in test_datasets:
+        intra_sim, anisotropy = calculate_intrasim(model, test_dataset, tokenizer)
+        base_intra_sim, base_anisotropy = calculate_intrasim(base_model, test_dataset, tokenizer)
+
+        with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
+            print(test_name, "intra_sim:", intra_sim, file=f)
+            print(test_name, "anisotropy:", anisotropy, file=f)
+            print(test_name, "base_intra_sim:", intra_sim, file=f)
+            print(test_name, "base_anisotropy:", anisotropy, file=f)
+    
