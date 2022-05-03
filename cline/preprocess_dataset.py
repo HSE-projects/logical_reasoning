@@ -321,6 +321,9 @@ if __name__ == "__main__":
     elif model_args.dataset_name == 'ag_news':
         news = load_dataset('ag_news', cache_dir=model_args.cache_dir)
         cline_dataset = news.map(preprocess_news, batched=True, remove_columns=['label'])
+    elif model_args.dataset_name == 'mnli':
+        mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
+        cline_dataset = mnli.map(preprocess_snli, batched=True, remove_columns=['promptID', 'pairID', 'premise', 'premise_binary_parse', 'premise_parse', 'hypothesis', 'hypothesis_binary_parse', 'hypothesis_parse', 'genre'])
         
     spacy_nlp.add_pipe('replace_word', last=True)
     preprocess_cline = cline_dataset.map(word_replace,

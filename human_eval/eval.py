@@ -50,15 +50,15 @@ def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
     if shuffled:
-        with open('predictions.npy', 'wb') as f:
+        with open(os.path.join(model_args.output_dir, 'predictions.npy'), 'rb') as f:
             norm_predictions = np.load(f)
         interesting_predictions = predictions[norm_predictions == labels]
         interesting_labels = labels[norm_predictions == labels]
-        return {'accuracy': metric.compute(predictions=interesting_predictions, references=interesting_labels), 'neutral': (predictions == 1).sum()}
+        return {'accuracy': metric.compute(predictions=interesting_predictions, references=interesting_labels), 'neutral': (predictions == 1).mean()}
     else:
-        with open('predictions.npy', 'wb') as f:
+        with open(os.path.join(model_args.output_dir, 'predictions.npy'), 'wb') as f:
             np.save(f, predictions)
-        return {'accuracy': metric.compute(predictions=predictions, references=labels), 'neutral': (predictions == 1).sum()}
+        return {'accuracy': metric.compute(predictions=predictions, references=labels), 'neutral': (predictions == 1).mean()}
 
 @dataclass
 class PreprocessArguments:
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     metric = load_metric("accuracy")
     set_seed(42)
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
-
+    os.remove(os.path.join(model_args.output_dir, 'human_results.txt')) 
     for task_name in ['snli', 'mnli']:
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
@@ -126,7 +126,10 @@ if __name__ == "__main__":
 
         with open(os.path.join(model_args.output_dir, 'human_results.txt'), 'a') as f:
             for test_name, test_dataset, test_shuffled in test_datasets:
+                shuffled = False
                 res = trainer.predict(test_dataset)
+                normal_neutral = res.metrics['test_neutral']
+                shuffled = True
                 res = trainer.predict(test_shuffled)
                 if trainer.is_world_process_zero():
-                    print(task_name, test_name, res.metrics['test_accuracy'], res.metrics['test_neutral'], file=f)
+                    print(task_name, test_name, res.metrics['test_accuracy'], normal_neutral, res.metrics['test_neutral'], file=f)

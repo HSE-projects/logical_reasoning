@@ -99,14 +99,18 @@ if __name__ == "__main__":
         train_dataset = concatenate_datasets([dataset["train"].shuffle(seed=42), dataset["validation"].shuffle(seed=42), dataset["test"].shuffle(seed=42)]).shuffle(seed=42)
         if "vadidation" in dataset.keys():
             eval_dataset = dataset["validation"]
-        else:
+        elif "test" in dataset.keys():
             eval_dataset = dataset["test"]
+        else:
+            eval_dataset = dataset["validation_matched"]
     else:
         train_dataset = dataset["train"].shuffle(seed=42)
         if "vadidation" in dataset.keys():
             eval_dataset = dataset["validation"]
-        else:
+        elif "test" in dataset.keys():
             eval_dataset = dataset["test"]
+        else:
+            eval_dataset = dataset["validation_matched"]
     
     training_args = TrainingArguments(
         output_dir=os.path.join(model_args.output_dir, 'cline'),
