@@ -40,7 +40,7 @@ def shuffle_snli(examples):
     return examples
 
 import pandas as pd
-def parse_adversarial(filename):
+def parse_adversarial_snli(filename):
     premises = []
     hypotheses = []
     labels = []
@@ -52,13 +52,14 @@ def parse_adversarial(filename):
                 premises.append(premise.strip())
                 cnt += 1
             elif cnt == 1:
+                orig = line
                 cnt += 1
             elif cnt == 2:
                 info, hypothesis = line.split('\t')
                 hypotheses.append(hypothesis.strip())
-                if 'contradiction' in info:
+                if 'contradiction' in orig:
                     labels.append(2)
-                elif 'neutral' in info:
+                elif 'neutral' in orig:
                     labels.append(1)
                 else:
                     labels.append(0)
@@ -71,6 +72,61 @@ def parse_adversarial(filename):
     ans['label'] = labels
 
     return ans
+
+import ast
+import re
+
+def parse_adversarial_mnli(filename):
+    anses = {}
+    mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
+    if not 'mis' in filename:
+        for i in range(len(mnli['validation_matched'])):
+            premise = mnli['validation_matched'][i]['premise'].strip()[:20]
+            hypothesis = mnli['validation_matched'][i]['hypothesis'].strip()
+            hypothesis = ' '.join(hypothesis.split())
+            anses[premise + hypothesis] = mnli['validation_matched'][i]['label']
+    else:
+        print("H" * 100)
+        for i in range(len(mnli['validation_mismatched'])):
+            premise = mnli['validation_mismatched'][i]['premise'].strip()[:20]
+            hypothesis = mnli['validation_mismatched'][i]['hypothesis'].strip()
+            hypothesis = ' '.join(hypothesis.split())
+            anses[premise + hypothesis] = mnli['validation_mismatched'][i]['label']
+    premises = []
+    hypotheses = []
+    labels = []
+    with open(filename, 'r') as f:
+        cnt = 0
+        for line in f:
+            if cnt == 0:
+                skip = False
+                info, premise = line.split('\t')
+                premise = premise.strip()
+                premise = re.sub(r'\s([?.,;!"](?:\s|$))', r'\1', premise).replace(" '", "'").replace(" n't", "n't").replace(" :", ":").replace("''", '"').replace("-LRB- ", "(").replace(" -RRB-", ")").replace("-LSB- ", "[").replace(" -RSB-", "]").replace(' $ ', ' $').replace("` ", "'")[:20]
+                cnt += 1
+            elif cnt == 1:
+                _, orig_hypothesis = line.split('\t')
+                orig_hypothesis = ' '.join(ast.literal_eval(orig_hypothesis))
+                orig_hypothesis = re.sub(r'\s([?.!;,"](?:\s|$))', r'\1', orig_hypothesis).replace(" '", "'").replace(" n't", "n't").replace(" :", ":").replace("''", '"').replace("-LRB- ", "(").replace(" -RRB-", ")").replace("-LSB- ", "[").replace(" -RSB-", "]").replace(' $ ', ' $').replace("` ", "'")
+                cnt += 1
+                if not premise + orig_hypothesis in anses.keys():
+                    skip = True
+                else:
+                    labels.append(anses[premise + orig_hypothesis])
+            elif cnt == 2:
+                if not skip:
+                    info, hypothesis = line.split('\t')
+                    premises.append(premise.strip())
+                    hypotheses.append(hypothesis.strip())
+                cnt += 1
+            elif cnt == 3:
+                cnt = 0
+    ans = pd.DataFrame()
+    ans['premise'] = premises
+    ans['hypothesis'] = hypotheses
+    ans['label'] = labels
+    return ans
+
 
 def parse_contrastive_snli(filename):
     data = pd.read_excel(filename, index_col=0)
@@ -132,31 +188,32 @@ if __name__ == "__main__":
     parser = HfArgumentParser((PreprocessArguments,))
     model_args, = parser.parse_args_into_dataclasses()
      
-#     snli = load_dataset("snli", cache_dir=model_args.cache_dir)
-#     preprocess_snli = snli.map(shuffle_snli, batched=False)
-#     preprocess_snli.save_to_disk(os.path.join(model_args.datasets_dir, 'shuffle_snli'))
+    snli = load_dataset("snli", cache_dir=model_args.cache_dir)
+    preprocess_snli = snli.map(shuffle_snli, batched=False)
+    preprocess_snli.save_to_disk(os.path.join(model_args.datasets_dir, 'shuffle_snli'))
     
-#     mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
-#     preprocess_mnli = mnli.map(shuffle_snli, batched=False)
-#     preprocess_mnli.save_to_disk(os.path.join(model_args.datasets_dir, 'shuffle_mnli'))
+    mnli = load_dataset("multi_nli", cache_dir=model_args.cache_dir)
+    preprocess_mnli = mnli.map(shuffle_snli, batched=False)
+    preprocess_mnli.save_to_disk(os.path.join(model_args.datasets_dir, 'shuffle_mnli'))
     
-#     pd_dataset = parse_adversarial(os.path.join(model_args.files_path, 'snli_bert'))
-#     pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_snli_tmp.csv'), index=False)
-#     data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_snli_tmp.csv')}
-#     dataset = load_dataset("csv", data_files=data_files)
-#     dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_snli'))
+    pd_dataset = parse_adversarial_snli(os.path.join(model_args.files_path, 'snli_bert'))
+    pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_snli_tmp.csv'), index=False)
+    data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_snli_tmp.csv')}
+    dataset = load_dataset("csv", data_files=data_files)
+    dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_snli'))
     
-#     pd_dataset = parse_adversarial(os.path.join(model_args.files_path, 'mnli_matched_bert'))
-#     pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv'), index=False)
-#     data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv')}
-#     dataset = load_dataset("csv", data_files=data_files)
-#     dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_matched'))
+    pd_dataset = parse_adversarial_mnli(os.path.join(model_args.files_path, 'mnli_matched_bert'))
+    pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv'), index=False)
+    data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv')}
+    dataset = load_dataset("csv", data_files=data_files)
+    dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_matched'))
     
-#     pd_dataset = parse_adversarial(os.path.join(model_args.files_path, 'mnli_mismatched_bert'))
-#     pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv'), index=False)
-#     data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv')}
-#     dataset = load_dataset("csv", data_files=data_files)
-#     dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_mismatched'))
+    pd_dataset = parse_adversarial_mnli(os.path.join(model_args.files_path, 'mnli_mismatched_bert'))
+    print(pd_dataset)
+    pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv'), index=False)
+    data_files = {"test": os.path.join(model_args.datasets_dir, 'adv_mnli_tmp.csv')}
+    dataset = load_dataset("csv", data_files=data_files)
+    dataset.save_to_disk(os.path.join(model_args.datasets_dir, 'adv_mnli_mismatched'))
 
     pd_dataset = parse_contrastive_snli(os.path.join(model_args.files_path, 'snli_contrastive.xlsx'))
     pd_dataset.to_csv(os.path.join(model_args.datasets_dir, 'con_snli_tmp.csv'), index=False)
