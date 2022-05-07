@@ -15,9 +15,9 @@ class DataCollatorForSim:
     - preprocesses batches for both sentence classification and masked language modeling
     """
     tokenizer: PreTrainedTokenizerBase
-    mlm: bool = True
     mlm_probability: float = 0.15
     block_size: int = 512
+    entropy: bool = False 
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> Dict[str, torch.Tensor]:
         batch_size = len(examples)
@@ -42,9 +42,13 @@ class DataCollatorForSim:
         input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
         attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
 
-        mlm_sent, mlm_label = self.mask_tokens(input_ids[batch_size:])
-        input_ids[batch_size:] = mlm_sent
-        
+        if not self.entropy:
+            mlm_sent, mlm_label = self.mask_tokens(input_ids[batch_size:])
+            input_ids[batch_size:] = mlm_sent
+        else:
+            shuffle_sent, mlm_label = self.mask_tokens(input_ids[batch_size:])
+            # mlm_label is zero buffer with no sense
+            input_ids[batch_size:] = shuffle_sent
         labels = torch.cat((torch.tensor(class_label).view(-1, 1), mlm_label), dim=1)
         a, b = input_ids[:batch_size], input_ids[batch_size:]
         input_ids = torch.cat((a, b), dim=1)
@@ -90,4 +94,32 @@ class DataCollatorForSim:
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+    def shuffle_tokens(self, inputs: torch.Tensor, ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Prepare shuffled tokens inputs/labels: 50% shuffle.
+        """
+
+        if self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+            )
+
+        labels = torch.zeros(inputs.shape, dtype=torch.long)
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+        shuffle_mask = torch.ones(labels.shape)
+        special_tokens_mask = [
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in inputs.tolist()
+        ]
+        shuffle_mask.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+        if self.tokenizer._pad_token is not None:
+            padding_mask = inputs.eq(self.tokenizer.pad_token_id)
+            shuffle_mask.masked_fill_(padding_mask, value=0.0)
+
+        for i in range(len(inputs)):
+            sentence_indices = torch.nonzero(shuffle_mask[i])
+            r = torch.randperm(len(sentence_indices))
+            inputs[i][sentence_indices] = inputs[i][sentence_indices[r]]
+
         return inputs, labels

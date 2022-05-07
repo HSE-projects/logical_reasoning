@@ -85,6 +85,27 @@ class PreprocessArguments:
     mlm_layer12: Optional[bool] = field(
         default=False, metadata={"help": "Use mlm loss on layer 12"}
     )
+    entropy_layer2: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 2"}
+    )
+    entropy_layer4: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 4"}
+    )
+    entropy_layer6: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 6"}
+    )
+    entropy_layer8: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 8"}
+    )
+    entropy_layer10: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 10"}
+    )
+    entropy_layer12: Optional[bool] = field(
+        default=False, metadata={"help": "Use entropy loss on layer 12"}
+    )
+    use_entropy_layer: Optional[bool] = field(
+        default=False, metadata={"help": "Use mlm loss on layer 12"}
+    )
     task_name: Optional[str] = field(
         default='snli', metadata={"help": "Task to finetune - snli or mnli"}
     )
@@ -120,7 +141,13 @@ if __name__ == "__main__":
     
     set_seed(42)
     tokenizer = SimbertTokenizer.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
-    data_collator = DataCollatorForSim(tokenizer=tokenizer)
+    entropy = False
+    if model_args.entropy_layer2 or model_args.entropy_layer4 or model_args.entropy_layer6 or model_args.entropy_layer8 or model_args.entropy_layer10 or model_args.entropy_layer12:
+        entropy = True
+    if entropy:
+        if model_args.mlm_layer2 or model_args.mlm_layer4 or model_args.mlm_layer6 or model_args.mlm_layer8 or model_args.mlm_layer10 or model_args.mlm_layer12:
+            print("Usage of mlm and entropy together is not supported")
+    data_collator = DataCollatorForSim(tokenizer=tokenizer, entropy=entropy)
     
     config = SimConfig.from_pretrained(model_args.model_name, cache_dir=model_args.cache_dir)
     config.mlm_layer2 = model_args.mlm_layer2
@@ -129,6 +156,13 @@ if __name__ == "__main__":
     config.mlm_layer8 = model_args.mlm_layer8
     config.mlm_layer10 = model_args.mlm_layer10
     config.mlm_layer12 = model_args.mlm_layer12
+    config.entropy_layer2 = model_args.entropy_layer2
+    config.entropy_layer4 = model_args.entropy_layer4
+    config.entropy_layer6 = model_args.entropy_layer6
+    config.entropy_layer8 = model_args.entropy_layer8
+    config.entropy_layer10 = model_args.entropy_layer10
+    config.entropy_layer12 = model_args.entropy_layer12
+    config.use_entropy_layer = model_args.use_entropy_layer
     config.num_labels = 3
 
     model = SimbertForPreTraining.from_pretrained(model_args.model_name, config=config, cache_dir=model_args.cache_dir)

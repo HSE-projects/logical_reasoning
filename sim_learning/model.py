@@ -3,6 +3,7 @@ import warnings
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss, BCELoss
+import torch.nn.functional as F
 from dataclasses import dataclass
 
 from typing import Optional, Tuple
@@ -57,6 +58,17 @@ class RobertaClassificationHead(nn.Module):
         x = self.out_proj(x)
         return x
 
+    
+class HLoss(nn.Module):
+    def __init__(self):
+        super(HLoss, self).__init__()
+
+    def forward(self, x):
+        b = F.softmax(x, dim=1) * F.log_softmax(x, dim=1)
+        b = b.sum()
+        return b
+    
+
 class SimbertForPreTraining(RobertaPreTrainedModel):
     authorized_missing_keys = [r"position_ids"]
 
@@ -78,7 +90,8 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
         if self.config.mlm_layer12:
             self.mlm_head12 = RobertaLMHead(config)
         self.classifier = RobertaClassificationHead(config)
-        
+        self.entropy_layer = RobertaClassificationHead(config)
+
         self.init_weights()
 
     def forward(
@@ -135,10 +148,28 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
             mlm_scores10 = self.mlm_head10(hidden_states[10][batch_size:])
         if self.config.mlm_layer12:
             mlm_scores12 = self.mlm_head12(hidden_states[12][batch_size:])
+            
+        if self.config.use_entropy_layer:
+            entropy_layer = self.entropy_layer
+        else:
+            entropy_layer = self.classifier
+        if self.config.entropy_layer2:
+            entropy_scores2 = entropy_layer(hidden_states[2][batch_size:])
+        if self.config.entropy_layer4:
+            entropy_scores4 = entropy_layer(hidden_states[4][batch_size:])
+        if self.config.entropy_layer6:
+            entropy_scores6 = entropy_layer(hidden_states[6][batch_size:])
+        if self.config.entropy_layer8:
+            entropy_scores8 = entropy_layer(hidden_states[8][batch_size:])
+        if self.config.entropy_layer10:
+            entropy_scores10 = entropy_layer(hidden_states[10][batch_size:])
+        if self.config.entropy_layer12:
+            entropy_scores12 = entropy_layer(hidden_states[12][batch_size:])
 
         total_loss = None
         if labels is not None:
             loss_tok = CrossEntropyLoss()
+            loss_h = HLoss()
             loss_class = CrossEntropyLoss()
             class_loss = loss_class(class_scores, class_labels)
 
@@ -161,12 +192,29 @@ class SimbertForPreTraining(RobertaPreTrainedModel):
             if self.config.mlm_layer12:
                 mlm_loss = loss_tok(mlm_scores12.view(-1, self.config.vocab_size), mlm_labels.reshape(-1))
                 total_loss += mlm_loss
-
+            
+            if self.config.entropy_layer2:
+                entropy_loss = loss_h(entropy_scores2)
+                total_loss += entropy_loss
+            if self.config.entropy_layer4:
+                entropy_loss = loss_h(entropy_scores4)
+                total_loss += entropy_loss
+            if self.config.entropy_layer6:
+                entropy_loss = loss_h(entropy_scores6)
+                total_loss += entropy_loss
+            if self.config.entropy_layer8:
+                entropy_loss = loss_h(entropy_scores8)
+                total_loss += entropy_loss
+            if self.config.entropy_layer10:
+                entropy_loss = loss_h(entropy_scores10)
+                total_loss += entropy_loss
+            if self.config.entropy_layer12:
+                entropy_loss = loss_h(entropy_scores12)
+                total_loss += entropy_loss
             #print(mlm_loss.item(), tec_loss.item(), sec_loss.item())
         if not return_dict:
-            output = (mlm_scores,) + outputs[2:]
+            output = (class_scores,)
             return ((total_loss,) + output) if total_loss is not None else output
-    
         return SimbertOutput(
             loss=total_loss,
             prediction_logits=class_scores,
@@ -188,3 +236,10 @@ class SimConfig(RobertaConfig):
     mlm_layer8 = False
     mlm_layer10 = False
     mlm_layer12 = False
+    entropy_layer6 = False
+    entropy_layer4 = False
+    entropy_layer2 = False
+    entropy_layer8 = False
+    entropy_layer10 = False
+    entropy_layer12 = False
+    use_entropy_layer = False
