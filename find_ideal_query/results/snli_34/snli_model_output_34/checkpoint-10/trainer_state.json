@@ -1,0 +1,28 @@
+{
+  "best_metric": 0.3,
+  "best_model_checkpoint": "workdir/snli_model_output_34/checkpoint-10",
+  "epoch": 3.3333333333333335,
+  "global_step": 10,
+  "is_hyper_param_search": false,
+  "is_local_process_zero": true,
+  "is_world_process_zero": true,
+  "log_history": [
+    {
+      "epoch": 3.33,
+      "eval_accuracy": 0.3,
+      "eval_f1_macro": 0.15384615384615383,
+      "eval_f1_micro": 0.3,
+      "eval_f1_weighted": 0.13846153846153844,
+      "eval_loss": 1.0969713926315308,
+      "eval_runtime": 0.5923,
+      "eval_samples_per_second": 84.418,
+      "eval_steps_per_second": 1.688,
+      "step": 10
+    }
+  ],
+  "max_steps": 10,
+  "num_train_epochs": 4,
+  "total_flos": 2362881825612.0,
+  "trial_name": null,
+  "trial_params": null
+}
