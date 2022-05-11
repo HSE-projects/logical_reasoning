@@ -8,3 +8,13 @@
 * `{dataset}_final_query` - итоговый датасет из хороших примеров
 * `{dataset}_train_sample` - чекпоинты датасетов после добавления каждого примера
 * `{dataset}_best_metrics.yaml` - итоговый `accuracy`
+
+Датасеты читаются через `torch.load()`:
+```python
+import torch
+torch.load('./snli_34/snli_final_query')
+>>> Dataset({
+    features: ['input_ids', 'attention_mask', 'labels'],
+    num_rows: 52
+})
+```
