@@ -3,6 +3,8 @@ import os
 if os.environ.get("OFFLINE_MODE", "false") == "true":
     os.environ["HF_DATASETS_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+else:
+    print('ONLINE MODE')
 
 import transformers as ts
 from datasets import load_metric, load_dataset, concatenate_datasets
@@ -35,8 +37,8 @@ INIT_TRAIN_SIZE = "auto"
 MODEL_CHECKPOINT = os.environ.get("MODEL_CHECKPOINT", "roberta-base")
 NUM_QUERIES = int(os.environ.get("NUM_QUERIES", 50))
 SEED = int(os.environ.get("SEED", 42))
-VALID_SUBSAMPLE_SIZE = int(os.environ.get("VALID_SUBSAMPLE_SIZE", 500))
-QUERY_SUBSAMPLE_SIZE = int(os.environ.get("QUERY_SUBSAMPLE_SIZE", 1000))
+VALID_SUBSAMPLE_SIZE = int(os.environ.get("VALID_SUBSAMPLE_SIZE", 400))
+QUERY_SUBSAMPLE_SIZE = int(os.environ.get("QUERY_SUBSAMPLE_SIZE", 50))
 TRAIN_BATCH_SIZE = int(os.environ.get("TRAIN_BATCH_SIZE", 16))
 DATASET = os.environ.get("DATASET_NAME", "snli")
 PREMISE_COLUMN_NAME = os.environ.get("PREMISE_COLUMN_NAME", "premise")
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     training_args = ts.TrainingArguments(
         output_dir=f"workdir/{DATASET}_model_output_{SEED}",
         # Steps & Batch size args
-        max_steps=10,
+        max_steps=100,
         per_device_train_batch_size=TRAIN_BATCH_SIZE,
         per_device_eval_batch_size=eval_batch_size,
         # Optimizer args
