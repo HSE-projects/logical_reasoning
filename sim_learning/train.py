@@ -196,6 +196,7 @@ if __name__ == "__main__":
         num_train_epochs=model_args.num_train_epochs,
         save_total_limit=1,
         load_best_model_at_end=True,
+        metric_for_best_model='accuracy',
         seed=42,
         learning_rate=model_args.learning_rate,
         weight_decay=0.01,  # strength of weight decay
