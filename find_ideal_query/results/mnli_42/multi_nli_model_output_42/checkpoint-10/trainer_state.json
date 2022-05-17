@@ -1,0 +1,28 @@
+{
+  "best_metric": 0.28,
+  "best_model_checkpoint": "workdir/multi_nli_model_output_42/checkpoint-10",
+  "epoch": 3.3333333333333335,
+  "global_step": 10,
+  "is_hyper_param_search": false,
+  "is_local_process_zero": true,
+  "is_world_process_zero": true,
+  "log_history": [
+    {
+      "epoch": 3.33,
+      "eval_accuracy": 0.28,
+      "eval_f1_macro": 0.14583333333333334,
+      "eval_f1_micro": 0.28,
+      "eval_f1_weighted": 0.12250000000000001,
+      "eval_loss": 1.099002718925476,
+      "eval_runtime": 0.6255,
+      "eval_samples_per_second": 79.933,
+      "eval_steps_per_second": 1.599,
+      "step": 10
+    }
+  ],
+  "max_steps": 10,
+  "num_train_epochs": 4,
+  "total_flos": 5050544276232.0,
+  "trial_name": null,
+  "trial_params": null
+}
