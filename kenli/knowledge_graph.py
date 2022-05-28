@@ -15,29 +15,30 @@ class KnowledgeGraph:
 
 class CauseNet(KnowledgeGraph):
     max_depth: int
-    min_object_count: int
+    max_object_count: int
     g: Dict[str, List[str]]
 
-    def __init__(self, max_depth: int = 2, min_object_count: int = 5, use_full: bool = False):
+    def __init__(self, max_depth: int = 2, max_object_count: int = 5, use_full: bool = False, need_loading: bool = False):
         self.max_depth = max_depth
-        self.min_object_count = min_object_count
+        self.max_object_count = max_object_count
         
-        print('Downloading CauseNet...')
-        if use_full:
-            exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-full.jsonl.bz2')
-            exec_bash('mv causenet-full.jsonl.bz2 causenet.jsonl.bz2')
-        else:
-            exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-precision.jsonl.bz2')
-            exec_bash('mv causenet-precision.jsonl.bz2 causenet.jsonl.bz2')
-        print('Resulting size of causenet.jsonl.bz2:')
-        exec_bash('du -h causenet.jsonl.bz2')
+        if need_loading:
+            print('Downloading CauseNet...')
+            if use_full:
+                exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-full.jsonl.bz2')
+                exec_bash('mv causenet-full.jsonl.bz2 causenet.jsonl.bz2')
+            else:
+                exec_bash('wget https://groups.uni-paderborn.de/wdqa/causenet/causality-graphs/causenet-precision.jsonl.bz2')
+                exec_bash('mv causenet-precision.jsonl.bz2 causenet.jsonl.bz2')
+            print('Resulting size of causenet.jsonl.bz2:')
+            exec_bash('du -h causenet.jsonl.bz2')
 
-        print('Removing old file...')
-        #exec_bash('rm causenet.jsonl')
-        print('Unpacking bz2 file...')
-        exec_bash('bzip2 -d causenet.jsonl.bz2')
-        print('Resulting size of causenet.jsonl:')
-        exec_bash('du -h causenet.jsonl')
+            print('Removing old file...')
+            #exec_bash('rm causenet.jsonl')
+            print('Unpacking bz2 file...')
+            exec_bash('bzip2 -d causenet.jsonl.bz2')
+            print('Resulting size of causenet.jsonl:')
+            exec_bash('du -h causenet.jsonl')
 
         print('Extracting connections...')
         connections = []
@@ -60,12 +61,24 @@ class CauseNet(KnowledgeGraph):
         if len(premise_objects) == 0:
           useful_objects.update({"cat"})
         else:
-          rand_steps = - len(useful_objects) + self.min_object_count
+          rand_steps = - len(useful_objects) + self.max_object_count
           for _ in range(rand_steps):
               rand_objects, rand_edges = self._get_random_path(premise_objects)
               useful_objects.update(rand_objects)
               edges.update(rand_edges)
-        return useful_objects, edges
+              if len(useful_objects) >= self.max_object_count:
+                break
+
+        if len(useful_objects) > self.max_object_count:
+          useful_objects_max = set()
+          useful_objects = list(useful_objects)
+          max_ind = len(useful_objects)
+          for _ in range(self.max_object_count):
+            rand_ind = random.randint(0, max_ind - 1)
+            useful_objects_max.add(useful_objects[rand_ind])
+        else:
+          useful_objects_max = useful_objects
+        return useful_objects_max, edges
 
     def _get_objects(self, sentence: str):
         sentence = sentence.lower()
@@ -78,7 +91,7 @@ class CauseNet(KnowledgeGraph):
                 if cur_word != "":
                     words.append(cur_word)
                     cur_word = ""
-        if cur_word != "":
+        if ((cur_word != "") and (len(cur_word) > 2)):
             words.append(cur_word)
         result = words
         for i in range(1, len(words)):
@@ -120,4 +133,5 @@ class CauseNet(KnowledgeGraph):
             edges.add((result[edge_ind], result[edge_ind + 1]))
         #print('Added random path:', result)
         return result, edges
+
 
